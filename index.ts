@@ -1,4 +1,7 @@
 import { rafRunner, randomArrayChoice, randomRange, timeout } from 'thorish';
+import { buildWindowCanvas, colorForNode, splitNode } from './lib/helper.ts';
+
+const SERVER_COUNT = 4;
 
 const slider = document.createElement('input');
 slider.type = 'range';
@@ -11,20 +14,7 @@ slider.max = '4000';
 slider.value = '500';
 document.body.append(slider);
 
-const c = document.createElement('canvas');
-document.body.append(c);
-
-const sizeCanvas = () => {
-  c.width = window.innerWidth * window.devicePixelRatio;
-  c.height = window.innerHeight * window.devicePixelRatio;
-
-  c.style.display = 'block';
-  c.style.width = `${window.innerWidth}px`;
-  c.style.height = `${window.innerHeight}px`;
-};
-
-window.addEventListener('resize', sizeCanvas);
-sizeCanvas();
+const c = buildWindowCanvas();
 
 // ----- 'game'
 
@@ -41,7 +31,6 @@ class Server {
 
     (async () => {
       for (;;) {
-        console.info('send after', slider.valueAsNumber);
         await timeout(slider.valueAsNumber);
 
         const sendFrom = this.nodes.slice(); // we sort
@@ -76,7 +65,12 @@ class Server {
       for (;;) {
         await timeout(randomRange(2000, 3500));
 
-        const parentNode = randomArrayChoice(this.nodes)!;
+        // choose a node but skew towards the end of the string
+
+        const nodeChoice = Math.floor(Math.pow(Math.random(), 0.4) * this.nodes.length);
+        const parentNode = this.nodes[nodeChoice];
+
+        // const parentNode = randomArrayChoice(this.nodes)!;
         const parent = parentNode.id;
 
         ++index;
@@ -88,16 +82,15 @@ class Server {
   }
 
   private insert(node: Node) {
-    const nv = +node.id.slice(1);
+    const { n: nv } = splitNode(node.id);
 
     const parentNode = this.nodes.find((n) => n.id === node.parent)!;
     const parentIndex = this.nodes.indexOf(parentNode);
     if (parentIndex === -1) {
       throw `bad parent`;
     }
-    const insertAt = this.nodes.indexOf(parentNode) + 1;
 
-    // TODO: we want to insert immediately before (or after?) our peer children
+    // we want to insert immediately before (or after?) our peer children
 
     let i: number;
     for (i = parentIndex + 1; i < this.nodes.length; ++i) {
@@ -110,8 +103,7 @@ class Server {
         continue;
       }
 
-      const cv = +cand.id.slice(1);
-      console.info(cv, nv);
+      const { n: cv } = splitNode(cand.id);
       if (cv > nv) {
         break;
       } else if (cv === nv && cand.id.localeCompare(node.id) > 0) {
@@ -156,13 +148,10 @@ class Server {
   }
 }
 
-const renderServers = [
-  new Server('a'),
-  new Server('b'),
-  new Server('c'),
-  // new Server('d'),
-  // new Server('e'),
-];
+const renderServers: Server[] = [];
+for (let i = 0; i < SERVER_COUNT; ++i) {
+  renderServers.push(new Server(String.fromCharCode(97 + i)));
+}
 
 const r = rafRunner(() => {
   r();
@@ -178,14 +167,14 @@ const r = rafRunner(() => {
   renderServers.forEach((r, index) => {
     ctx.save();
 
-    const ratio = index / renderServers.length;
+    const ratio = index / renderServers.length + 0.125 / 2;
     const x = Math.cos(ratio * Math.PI * 2);
     const y = Math.sin(ratio * Math.PI * 2);
     ctx.translate(x / 6 - 0.25, y / 3);
 
     ctx.scale((1 / c.width) * 2, (1 / c.height) * 2);
 
-    ctx.fillStyle = 'black';
+    ctx.fillStyle = colorForNode(r.id);
     ctx.font = '48px monospace';
     ctx.fillText(r.id, -ctx.measureText(r.id).width, 0);
 
@@ -199,11 +188,11 @@ const r = rafRunner(() => {
     r.nodes.forEach((node, i) => {
       let textStyle = '';
       if (node.id === '') {
-        ctx.fillStyle = '#7e75';
-        textStyle = '#070f';
+        ctx.fillStyle = '#0003';
+        textStyle = '#0009';
       } else {
-        ctx.fillStyle = '#f003';
-        textStyle = '#700f';
+        ctx.fillStyle = colorForNode(node.id, 0.3);
+        textStyle = colorForNode(node.id);
       }
 
       ctx.beginPath();
@@ -238,27 +227,34 @@ const r = rafRunner(() => {
 
     // render naughty nodes
     r.unknownNodes.forEach((node) => {
-      ctx.fillStyle = '#3333';
+      ctx.save();
+      ctx.translate(-10, 0);
+      ctx.scale(0.8, 0.8);
+      ctx.globalAlpha = 0.45;
+
+      ctx.fillStyle = colorForNode(node.parent, 0.3);
 
       ctx.beginPath();
       ctx.arc(0, 0, 14, 0, Math.PI * 2);
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = '#333f';
+      ctx.fillStyle = colorForNode(node.parent);
       ctx.fillText(node.parent, -ctx.measureText(node.parent).width / 2 - 0.75, 1.5);
 
-      ctx.save();
-      ctx.translate(0, 32);
+      ctx.restore();
 
-      ctx.fillStyle = '#00f3';
+      ctx.save();
+      ctx.translate(0, 16);
+
+      ctx.fillStyle = colorForNode(node.id, 0.3);
 
       ctx.beginPath();
       ctx.arc(0, 0, 14, 0, Math.PI * 2);
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = '#0073';
+      ctx.fillStyle = colorForNode(node.id);
       ctx.fillText(node.id, -ctx.measureText(node.id).width / 2 - 0.75, 1.5);
 
       ctx.restore();
