@@ -84,6 +84,12 @@ class Server {
   private insert(node: Node) {
     const { n: nv } = splitNode(node.id);
 
+    // if we already have this do nothing
+    const existing = this.nodes.find((n) => n.id === node.id);
+    if (existing) {
+      return;
+    }
+
     const parentNode = this.nodes.find((n) => n.id === node.parent)!;
     const parentIndex = this.nodes.indexOf(parentNode);
     if (parentIndex === -1) {
